@@ -5,7 +5,9 @@ __pycache__/
 .env
 .pytest_cache/
 data/raw/
-index/
+# O índice do modelo padrão vai no repositório: o app sobe sem depender do Planalto.
+index/*
+!index/paraphrase-multilingual-MiniLM-L12-v2.json
 logs/
 reports/
 scratch/

@@ -12,11 +12,14 @@ load_dotenv(ROOT / ".env")
 class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "claude-opus-5-5")
     judge_model: str = os.getenv("JUDGE_MODEL", "claude-opus-5-5")
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-large")
+    embedding_model: str = os.getenv(
+        "EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
     vector_store: str = os.getenv("VECTOR_STORE", "local")
     pinecone_index: str = os.getenv("PINECONE_INDEX", "rag-juridico-poc")
     top_k: int = int(os.getenv("TOP_K", "5"))
-    min_score: float = float(os.getenv("MIN_SCORE", "0.835"))
+    hybrid: bool = os.getenv("HYBRID", "true").lower() == "true"
+    min_score: float = float(os.getenv("MIN_SCORE", "0.53"))
 
     root: Path = ROOT
     sources_file: Path = ROOT / "sources.json"

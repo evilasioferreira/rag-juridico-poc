@@ -10,8 +10,8 @@ numpy>=2.0
 # Opcional: vector DB gerenciado (VECTOR_STORE=pinecone)
 # langchain-pinecone>=0.2
 
-# Opcional: interface de demonstração
-# streamlit>=1.40
+# Interface web
+streamlit>=1.40
 
 # Testes
 pytest>=8.0

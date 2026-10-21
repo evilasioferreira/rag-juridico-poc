@@ -1,8 +1,13 @@
 """Interface web da PoC. Rode com: streamlit run app.py"""
 
 import logging
+import sys
+from pathlib import Path
 
 import streamlit as st
+
+# No Streamlit Community Cloud o pacote não é instalado com `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from rag_juridico import quota
 from rag_juridico.chain import Answer, ask
@@ -49,11 +54,23 @@ if "history" not in st.session_state:
     st.session_state.count = 0
 
 
-@st.cache_resource(show_spinner="Carregando o índice do material...")
+@st.cache_resource(show_spinner="Carregando o índice do material (a primeira visita leva cerca de 1 minuto)...")
 def warm_up() -> bool:
     from rag_juridico.vectorstore import get_store
 
-    get_store()
+    try:
+        get_store()
+    except FileNotFoundError:
+        # Índice ausente (ex.: troca de modelo): gera a partir das fontes públicas.
+        from rag_juridico.chunking import build_documents
+        from rag_juridico.config import settings
+        from rag_juridico.sources import download_all
+        from rag_juridico.vectorstore import build_store
+
+        if not settings.raw_dir.exists():
+            download_all()
+        build_store(build_documents())
+        get_store.cache_clear()
     return True
 
 

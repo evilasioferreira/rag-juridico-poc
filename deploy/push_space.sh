@@ -3,11 +3,15 @@
 # O Space precisa de um README com cabeçalho YAML próprio; o README do GitHub fica intacto.
 #
 # Uso: deploy/push_space.sh <usuario-hf>/<nome-do-space>
-# Requer: token do HF com permissão de escrita em HF_TOKEN.
+# Requer: token do HF com permissão de escrita em HF_TOKEN, ou login feito com `hf auth login`.
 set -euo pipefail
 
 SPACE="${1:?informe <usuario-hf>/<nome-do-space>}"
-: "${HF_TOKEN:?defina HF_TOKEN com um token de escrita do Hugging Face}"
+TOKEN_FILE="${HF_HOME:-$HOME/.cache/huggingface}/token"
+if [ -z "${HF_TOKEN:-}" ] && [ -f "$TOKEN_FILE" ]; then
+  HF_TOKEN="$(cat "$TOKEN_FILE")"
+fi
+: "${HF_TOKEN:?defina HF_TOKEN ou rode hf auth login}"
 
 ROOT="$(git rev-parse --show-toplevel)"
 TMP="$(mktemp -d)"

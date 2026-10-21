@@ -6,14 +6,22 @@ sem mexer no resto.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
+import numpy as np
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
 from .config import settings
+from .hybrid import BM25, rrf
 
-LOCAL_INDEX = "store.json"
+CANDIDATES = 20  # quantos resultados de cada busca entram na fusão
+
+def local_index_path() -> Path:
+    # Um arquivo por modelo: trocar EMBEDDING_MODEL nunca reaproveita vetores de outro modelo.
+    slug = settings.embedding_model.split("/")[-1]
+    return settings.index_dir / f"{slug}.json"
 
 
 class FastEmbedEmbeddings(Embeddings):
@@ -69,7 +77,7 @@ def build_store(docs: list[Document]) -> VectorStore:
     store = InMemoryVectorStore(embedding=embeddings)
     store.add_documents(docs, ids=[d.id for d in docs])
     settings.index_dir.mkdir(parents=True, exist_ok=True)
-    store.dump(str(settings.index_dir / LOCAL_INDEX))
+    store.dump(str(local_index_path()))
     return store
 
 
@@ -77,12 +85,38 @@ def build_store(docs: list[Document]) -> VectorStore:
 def get_store() -> VectorStore:
     if settings.vector_store == "pinecone":
         return _pinecone_store()
-    path = settings.index_dir / LOCAL_INDEX
+    path = local_index_path()
     if not path.exists():
         raise FileNotFoundError(f"Índice não encontrado em {path}. Rode `python -m rag_juridico.cli ingest`.")
     return InMemoryVectorStore.load(str(path), embedding=get_embeddings())
 
 
+@lru_cache(maxsize=1)
+def _local_corpus() -> tuple[list[str], np.ndarray, BM25]:
+    store = get_store()
+    ids = list(store.store)
+    vectors = np.array([store.store[i]["vector"] for i in ids], dtype=np.float32)
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    return ids, vectors, BM25({i: store.store[i]["text"] for i in ids})
+
+
+def _hybrid(question: str, k: int) -> list[tuple[Document, float]]:
+    ids, vectors, bm25 = _local_corpus()
+    q = np.array(get_embeddings().embed_query(question), dtype=np.float32)
+    cosine = vectors @ (q / np.linalg.norm(q))
+    by_id = dict(zip(ids, cosine.tolist()))
+    dense = [ids[i] for i in np.argsort(-cosine)[:CANDIDATES]]
+    fused = rrf([dense, bm25.search(question, CANDIDATES)])[:k]
+    return [(d, by_id[d.id]) for d in get_store().get_by_ids(fused)]
+
+
 def retrieve(question: str, k: int | None = None) -> list[tuple[Document, float]]:
-    """Retorna (chunk, similaridade de cosseno), do mais para o menos similar."""
-    return get_store().similarity_search_with_score(question, k=k or settings.top_k)
+    """Retorna (chunk, similaridade de cosseno), na ordem de relevância.
+
+    No store local, combina busca vetorial e BM25 (RRF). O score devolvido é sempre
+    a similaridade de cosseno, usada pelo portão de relevância.
+    """
+    k = k or settings.top_k
+    if settings.hybrid and settings.vector_store == "local":
+        return _hybrid(question, k)
+    return get_store().similarity_search_with_score(question, k=k)

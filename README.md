@@ -13,20 +13,31 @@ chatbot", é tornar a resposta **verificável, recusável e medida**.
 
 ## Resultados
 
-Recuperação (30 perguntas, `multilingual-e5-large`, top 5):
+Recuperação nas 25 perguntas respondíveis (top 5), comparando modelos de embeddings e o efeito
+da busca híbrida (vetorial + BM25):
 
-| Métrica | Resultado |
-|---|---|
-| hit@5 (artigo certo entre os 5 trechos) | **25/25 (100%)** |
-| hit@1 (artigo certo em 1º lugar) | 21/25 (84%) |
-| perguntas fora do escopo barradas pelo portão de relevância, sem chamar o LLM | 3/5 |
+| Modelo de embeddings | Tamanho | Busca | hit@5 | hit@1 |
+|---|---|---|---|---|
+| `potion-multilingual-128M` | 0,5 GB | vetorial | 56% | 7/25 |
+| `paraphrase-multilingual-mpnet-base-v2` | 1 GB | vetorial | 88% | 12/25 |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 0,2 GB | vetorial | 92% | 13/25 |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 0,2 GB | **híbrida** | **96%** | **19/25** |
+| `multilingual-e5-large` | 2,2 GB | vetorial | 100% | 21/25 |
+| `multilingual-e5-large` | 2,2 GB | **híbrida** | **100%** | **21/25** |
 
-Calibração do portão (`MIN_SCORE`): as perguntas fora do material (CPC, Código Penal, taxa do
-exame) tiveram similaridade máxima entre 0,819 e 0,830; a menor pergunta respondível teve 0,848.
-O limiar foi fixado em 0,835. A margem é pequena e o dataset também, então o portão é tratado
-como **filtro de custo**, não como a defesa principal: as duas perguntas restantes (premissa
-falsa e súmula fora da base) passam pelo portão e precisam ser recusadas pelo modelo e pelos
-guardrails. Com perguntas reais de alunos, esse limiar deve ser recalibrado.
+hit@5 = o artigo certo está entre os 5 trechos entregues ao LLM; hit@1 = está em 1º lugar.
+
+O padrão do repositório é **MiniLM + híbrida**: cabe nos limites de memória do plano gratuito do
+Streamlit Community Cloud e fica a 4 pontos do modelo grande. A busca híbrida foi o que fechou a
+distância: o BM25 recupera termos exatos ("procuração", "sucumbência", "prescreve") que o modelo
+pequeno às vezes perde. Em servidor com 4 GB+ de RAM, `multilingual-e5-large` é a melhor escolha.
+
+**Portão de relevância (`MIN_SCORE`).** Com o e5-large, as perguntas fora do material ficaram
+entre 0,819 e 0,830 de similaridade e a menor respondível em 0,848 (limiar 0,835, barra 3 das 5).
+Com o MiniLM a separação é pior: limiar 0,53, que barra 2 das 5 (Código Penal e taxa do exame)
+sem nenhuma recusa indevida. Em ambos os casos o portão é tratado como **filtro de custo**, não
+como a defesa principal: o que passa por ele precisa ser recusado pelo modelo e pelos
+guardrails. Com perguntas reais de alunos, o limiar deve ser recalibrado.
 
 Avaliação completa com LLM (recusa, citação, fidelidade, acerto):
 `python -m rag_juridico.cli eval` gera o relatório em `reports/`.
@@ -37,7 +48,7 @@ Avaliação completa com LLM (recusa, citação, fidelidade, acerto):
 pergunta
    │
    ▼
-[1] busca vetorial (top 5 trechos, embeddings locais)
+[1] busca híbrida: vetorial (embeddings locais) + BM25, fundidas por RRF → top 5 trechos
    │
    ├── melhor similaridade < MIN_SCORE ──► recusa sem chamar o LLM (custo zero)
    ▼
@@ -76,9 +87,14 @@ Diretoria do Conselho Federal, art. 55). O parser remove `<strike>` e as anotaç
 3. *Guardrails determinísticos*: não dependem do modelo obedecer. Citação de trecho não recuperado
    ou menção a artigo ausente do contexto bloqueiam a resposta.
 
-**Embeddings locais (fastembed/ONNX, `multilingual-e5-large`).** Sem custo por consulta, sem enviar
-o material a um terceiro para vetorização, e com bom desempenho em português. O modelo é
-configurável (`EMBEDDING_MODEL`).
+**Embeddings locais (fastembed/ONNX).** Sem custo por consulta e sem enviar o material a um
+terceiro para vetorização. O modelo é configurável (`EMBEDDING_MODEL`) e cada modelo tem seu
+próprio arquivo de índice, então trocar de modelo nunca mistura vetores. A escolha entre eles
+foi feita medindo, não por reputação (tabela em Resultados).
+
+**Busca híbrida (vetorial + BM25, Reciprocal Rank Fusion).** Texto de lei tem termos exatos que
+decidem a resposta. A fusão por posição (RRF) dispensa calibrar pesos entre dois scores de
+escalas diferentes. O score devolvido continua sendo a similaridade de cosseno, usada pelo portão.
 
 **Vector store intercambiável.** A chain só conhece a interface `VectorStore` do LangChain.
 `VECTOR_STORE=local` usa um índice em arquivo (zero infraestrutura); `VECTOR_STORE=pinecone`
@@ -119,10 +135,10 @@ python -m rag_juridico.cli ask "Em quanto tempo prescreve a cobrança de honorá
 python -m rag_juridico.cli eval --retrieval-only   # mede só a busca, sem custo de LLM
 python -m rag_juridico.cli eval                    # avaliação completa
 python -m rag_juridico.cli stats                   # resumo dos logs
-pytest                                             # 16 testes offline (chunking, guardrails, chain com LLM simulado)
+pytest                                             # 19 testes offline (chunking, busca híbrida, guardrails, chain com LLM simulado)
 ```
 
-Interface web: `pip install streamlit && streamlit run app.py`.
+Interface web: `streamlit run app.py`.
 
 ## Demo pública
 
@@ -139,17 +155,23 @@ variável de ambiente:
 
 Perguntas barradas pelo portão de relevância não chamam o LLM e não contam no limite diário.
 
-Publicação no Hugging Face Spaces (gratuito, 16 GB de RAM, comporta o modelo de embeddings):
+**Publicação gratuita no Streamlit Community Cloud** (usa o modelo leve e o índice que já vem
+no repositório, então o app não depende do site do Planalto para subir):
 
-1. Crie um Space em huggingface.co/new-space com SDK **Docker** (template em branco).
-2. Em *Settings > Variables and secrets*, adicione o secret `ANTHROPIC_API_KEY`.
-3. Gere um token de escrita em huggingface.co/settings/tokens e rode:
-   ```bash
-   HF_TOKEN=<token> bash deploy/push_space.sh <usuario-hf>/<nome-do-space>
+1. Em share.streamlit.io, entre com o GitHub e clique em **Create app > Deploy a public app from GitHub**.
+2. Repositório `evilasioferreira/rag-juridico-poc`, branch `main`, arquivo `app.py`.
+3. Em *Advanced settings*, escolha Python **3.12** e cole em *Secrets*:
+   ```toml
+   ANTHROPIC_API_KEY = "sk-ant-..."
    ```
+4. **Deploy.** A primeira visita leva cerca de 1 minuto (download do modelo de 220 MB).
 
-O build baixa as fontes e gera o índice dentro da imagem; o app sobe pronto. Os logs do Space
-são efêmeros (somem ao reiniciar), o que basta para uma demonstração.
+Os logs são efêmeros (somem quando o app reinicia) e o app hiberna após alguns dias sem acesso.
+Para uma demonstração, basta.
+
+**Alternativa com Docker** (qualquer host, ou Hugging Face Spaces no plano pago): o `Dockerfile`
+gera fontes e índice no build. Para o Space, `bash deploy/push_space.sh <usuario>/<space>`
+depois de `hf auth login`.
 
 ## Estrutura
 
@@ -157,7 +179,9 @@ são efêmeros (somem ao reiniciar), o que basta para uma demonstração.
 src/rag_juridico/
   sources.py      download e extração (HTML do Planalto, PDF da OAB), remoção de texto revogado
   chunking.py     um chunk por artigo, com título/capítulo e ids citáveis
-  vectorstore.py  embeddings locais + store local ou Pinecone
+  vectorstore.py  embeddings locais + store local ou Pinecone + busca híbrida
+  hybrid.py       BM25 e Reciprocal Rank Fusion
+  quota.py        limites de uso da demo pública
   chain.py        recuperação, portão de relevância, LLM, montagem da resposta
   guardrails.py   validação determinística de citações e artigos mencionados
   logbook.py      log JSONL de cada interação e resumo de monitoramento
@@ -171,7 +195,7 @@ app.py              interface Streamlit
 
 - Trocar o material público pelo material do curso (apostilas, questões comentadas), mantendo
   o mesmo pipeline de chunking por unidade semântica (questão + comentário, artigo + doutrina).
-- Busca híbrida (vetorial + BM25) para perguntas que citam número de artigo ou termo exato.
+- Reranker (cross-encoder) sobre os 20 candidatos da busca híbrida, para subir o hit@1.
 - Logs em banco com painel: taxa de recusa por tema (mostra lacuna de conteúdo), perguntas
   bloqueadas por guardrail (mostra risco), latência e custo por aluno.
 - Feedback do aluno e do monitor em cada resposta, alimentando o dataset de avaliação.
