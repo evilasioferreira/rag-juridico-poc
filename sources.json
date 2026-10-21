@@ -1,0 +1,26 @@
+[
+  {
+    "id": "estatuto_oab",
+    "title": "Estatuto da Advocacia e da OAB (Lei 8.906/1994)",
+    "short": "EAOAB",
+    "url": "http://www.planalto.gov.br/ccivil_03/leis/l8906.htm",
+    "format": "html"
+  },
+  {
+    "id": "codigo_etica",
+    "title": "Código de Ética e Disciplina da OAB (Resolução 02/2015 CFOAB)",
+    "short": "CED",
+    "url": "https://www.oab.org.br/arquivos/resolucao-n-022015-ced-2030601765.pdf",
+    "format": "pdf",
+    "start_marker": "ANEXO ÚNICO"
+  },
+  {
+    "id": "constituicao",
+    "title": "Constituição Federal de 1988 (arts. 5º e 127 a 135)",
+    "short": "CF",
+    "url": "http://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm",
+    "format": "html",
+    "end_marker": "ATO DAS DISPOSIÇÕES CONSTITUCIONAIS TRANSITÓRIAS",
+    "articles": [[5, 5], [127, 135]]
+  }
+]

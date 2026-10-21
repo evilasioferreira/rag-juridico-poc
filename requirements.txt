@@ -1,0 +1,17 @@
+langchain-core>=1.6
+langchain-anthropic>=1.7
+langchain-text-splitters>=1.1
+fastembed>=0.9
+beautifulsoup4>=4.12
+pypdf>=6.0
+python-dotenv>=1.0
+numpy>=2.0
+
+# Opcional: vector DB gerenciado (VECTOR_STORE=pinecone)
+# langchain-pinecone>=0.2
+
+# Opcional: interface de demonstração
+# streamlit>=1.40
+
+# Testes
+pytest>=8.0
