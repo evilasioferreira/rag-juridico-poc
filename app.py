@@ -1,13 +1,40 @@
 """Interface web da PoC. Rode com: streamlit run app.py"""
 
 import logging
+import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import streamlit as st
 
 # No Streamlit Community Cloud o pacote não é instalado com `pip install -e .`.
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+CONFIG_KEYS = {
+    "ANTHROPIC_API_KEY", "LLM_MODEL", "JUDGE_MODEL", "EMBEDDING_MODEL", "MIN_SCORE", "TOP_K",
+    "HYBRID", "MAX_QUESTION_CHARS", "SESSION_LIMIT", "DAILY_LLM_LIMIT",
+}
+
+
+def load_streamlit_secrets() -> None:
+    """Copia os secrets do Streamlit Cloud para variáveis de ambiente antes de ler a config.
+
+    Aceita a chave na raiz ou dentro de uma seção (ex.: [anthropic]), e ignora maiúsculas.
+    """
+    try:
+        items = list(st.secrets.items())
+    except Exception:  # sem secrets.toml (execução local com .env)
+        return
+    for key, value in items:
+        pairs = value.items() if isinstance(value, Mapping) else [(key, value)]
+        for k, v in pairs:
+            name = "ANTHROPIC_API_KEY" if k.lower() == "api_key" else k.upper()
+            if name in CONFIG_KEYS and not os.getenv(name):
+                os.environ[name] = str(v).strip()
+
+
+load_streamlit_secrets()
 
 from rag_juridico import quota
 from rag_juridico.chain import Answer, ask
@@ -96,6 +123,12 @@ def render_answer(ans: Answer | str) -> None:
 def handle(question: str) -> None:
     question = question.strip()
     if not question:
+        return
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        logging.error("ANTHROPIC_API_KEY ausente: configure em Settings > Secrets")
+        st.session_state.history.append(
+            (question, "A demonstração está em manutenção (chave da IA não configurada). Volte em instantes.")
+        )
         return
     blocked = quota.check(question, st.session_state.count)
     if blocked:
