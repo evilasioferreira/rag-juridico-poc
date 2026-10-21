@@ -27,6 +27,7 @@ def main() -> None:
     p_eval.add_argument("--retrieval-only", action="store_true", help="só mede a recuperação (sem LLM)")
     p_eval.add_argument("--limit", type=int)
     sub.add_parser("stats")
+    sub.add_parser("audit-guardrails", help="testa os guardrails com trechos reais e respostas adulteradas")
     args = parser.parse_args()
 
     if args.cmd == "download":
@@ -51,6 +52,10 @@ def main() -> None:
 
         summary = run(limit=args.limit, retrieval_only=args.retrieval_only)
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.cmd == "audit-guardrails":
+        from .audit import run as audit
+
+        print(json.dumps(audit(), ensure_ascii=False, indent=2))
     elif args.cmd == "stats":
         from .logbook import summarize_logs
 

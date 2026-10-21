@@ -47,6 +47,20 @@ perguntas que passam pelo portão e dependem do modelo: uma de conhecimento gera
 (prazo de contestação do CPC, que o modelo sabe de memória) e uma premissa falsa ("qual artigo
 garante 60 dias de férias ao advogado?").
 
+**Auditoria dos guardrails** (`python -m rag_juridico.cli audit-guardrails`, offline, com os
+trechos reais do índice). As 25 respostas de referência são checadas citando os trechos
+esperados e depois adulteradas de três formas que um revisor técnico testaria primeiro:
+
+| Caso | Resultado |
+|---|---|
+| Respostas corretas aprovadas (sem falso bloqueio) | **25/25** |
+| Norma trocada ("art. 25 do Estatuto" → "do Código de Ética") | **25/25 bloqueadas** |
+| Prazo ou quórum alterado ("cinco anos" → "seis anos") | **9/9 bloqueadas** |
+| Artigo inexistente acrescentado ("art. 99 do Estatuto") | **25/25 bloqueadas** |
+
+Só 9 das 25 respostas de referência contêm prazo ou quórum, por isso o total menor na
+segunda linha. A auditoria roda como teste automatizado (`tests/test_audit.py`).
+
 Avaliação completa com LLM (recusa, citação, fidelidade, acerto) nas 30 perguntas:
 `python -m rag_juridico.cli eval` gera o relatório em `reports/`.
 
@@ -66,7 +80,8 @@ pergunta
    ▼
 [3] guardrails determinísticos
    │   - toda citação precisa ser um dos trechos recuperados
-   │   - todo "art. N" no texto precisa existir no contexto
+   │   - todo "art. N da norma X" precisa existir no contexto (norma + artigo)
+   │   - todo prazo/quórum (dias, meses, anos, terços, %) precisa estar nos trechos citados
    ├── violação ──► bloqueia e registra
    ▼
 [4] resposta + fontes (com link para o texto oficial)
@@ -92,8 +107,17 @@ Diretoria do Conselho Federal, art. 55). O parser remove `<strike>` e as anotaç
 **Três camadas contra alucinação, da mais barata para a mais cara:**
 1. *Portão de relevância*: se nenhum trecho passa da similaridade mínima, recusa sem chamar o LLM.
 2. *Instrução + formato*: o modelo responde em JSON e pode declarar `answerable: false`.
-3. *Guardrails determinísticos*: não dependem do modelo obedecer. Citação de trecho não recuperado
-   ou menção a artigo ausente do contexto bloqueiam a resposta.
+3. *Guardrails determinísticos*: não dependem do modelo obedecer. Bloqueiam a resposta quando:
+   - cita um trecho que não foi recuperado, ou não cita nenhum;
+   - menciona um artigo que não está no contexto **com aquela norma**. O número sozinho não basta:
+     "art. 25 do Código de Ética" é bloqueado quando o contexto só tem o art. 25 do Estatuto.
+     Referências internas dos trechos ("art. 34 desta Lei") são resolvidas para a norma de origem;
+   - afirma um prazo ou quórum que não aparece nos **trechos citados**. "15 dias" e "quinze dias"
+     são normalizados para o mesmo valor; "três anos" é bloqueado se o trecho diz "cinco anos".
+
+   Limite conhecido: a checagem cobre artigos, normas, prazos e quóruns, que são os erros de
+   maior dano em prova. Uma afirmação errada sem número nem artigo (ex.: trocar "censura" por
+   "advertência") não é pega por regra; para isso existe a avaliação de fidelidade com LLM juiz.
 
 **Embeddings locais (fastembed/ONNX).** Sem custo por consulta e sem enviar o material a um
 terceiro para vetorização. O modelo é configurável (`EMBEDDING_MODEL`) e cada modelo tem seu
@@ -143,7 +167,8 @@ python -m rag_juridico.cli ask "Em quanto tempo prescreve a cobrança de honorá
 python -m rag_juridico.cli eval --retrieval-only   # mede só a busca, sem custo de LLM
 python -m rag_juridico.cli eval                    # avaliação completa
 python -m rag_juridico.cli stats                   # resumo dos logs
-pytest                                             # 19 testes offline (chunking, busca híbrida, guardrails, chain com LLM simulado)
+python -m rag_juridico.cli audit-guardrails        # guardrails vs. respostas adulteradas, sem LLM
+pytest                                             # 27 testes offline (chunking, busca híbrida, guardrails, auditoria, chain com LLM simulado)
 ```
 
 Interface web: `streamlit run app.py`.
@@ -191,7 +216,8 @@ src/rag_juridico/
   hybrid.py       BM25 e Reciprocal Rank Fusion
   quota.py        limites de uso da demo pública
   chain.py        recuperação, portão de relevância, LLM, montagem da resposta
-  guardrails.py   validação determinística de citações e artigos mencionados
+  guardrails.py   validação determinística de citações, norma + artigo, prazos e quóruns
+  audit.py        auditoria dos guardrails com respostas adulteradas
   logbook.py      log JSONL de cada interação e resumo de monitoramento
   evaluate.py     avaliação automatizada e relatório em reports/
 eval/dataset.jsonl  30 perguntas com referência e artigo esperado
