@@ -9,6 +9,9 @@ Em conteúdo jurídico, o risco principal de um chatbot é alucinação: um arti
 inventado, entregue a um aluno na véspera da prova. Por isso o foco desta PoC não é "fazer um
 chatbot", é tornar a resposta **verificável, recusável e medida**.
 
+**▶ Teste a demo: [juridico-poc.streamlit.app](https://juridico-poc.streamlit.app)**
+(se o app estiver hibernando, a primeira abertura leva cerca de 1 minuto)
+
 > Usa somente material público (Planalto e OAB). Nenhum conteúdo pago de curso foi utilizado.
 
 ## Resultados
@@ -39,7 +42,12 @@ sem nenhuma recusa indevida. Em ambos os casos o portão é tratado como **filtr
 como a defesa principal: o que passa por ele precisa ser recusado pelo modelo e pelos
 guardrails. Com perguntas reais de alunos, o limiar deve ser recalibrado.
 
-Avaliação completa com LLM (recusa, citação, fidelidade, acerto):
+**Verificado na demo publicada:** respostas com o artigo-fonte citado, e recusa correta nas duas
+perguntas que passam pelo portão e dependem do modelo: uma de conhecimento geral fora da base
+(prazo de contestação do CPC, que o modelo sabe de memória) e uma premissa falsa ("qual artigo
+garante 60 dias de férias ao advogado?").
+
+Avaliação completa com LLM (recusa, citação, fidelidade, acerto) nas 30 perguntas:
 `python -m rag_juridico.cli eval` gera o relatório em `reports/`.
 
 ## Como funciona
