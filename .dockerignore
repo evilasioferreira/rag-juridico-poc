@@ -1,0 +1,11 @@
+.venv/
+.models/
+.git/
+.env
+__pycache__/
+*.egg-info/
+data/
+index/
+logs/
+reports/
+scratch/

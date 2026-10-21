@@ -122,7 +122,34 @@ python -m rag_juridico.cli stats                   # resumo dos logs
 pytest                                             # 16 testes offline (chunking, guardrails, chain com LLM simulado)
 ```
 
-Interface de demonstração: `pip install streamlit && streamlit run app.py`.
+Interface web: `pip install streamlit && streamlit run app.py`.
+
+## Demo pública
+
+A interface (`app.py`) foi feita para ficar aberta a quem quiser testar: chat com perguntas de
+exemplo (inclusive duas fora do material, para mostrar a recusa), fontes clicáveis com o texto
+do artigo e um painel de uso. Para proteger a chave da API, há três limites configuráveis por
+variável de ambiente:
+
+| Variável | Padrão | Efeito |
+|---|---|---|
+| `MAX_QUESTION_CHARS` | 400 | tamanho máximo da pergunta |
+| `SESSION_LIMIT` | 15 | perguntas por sessão de navegador |
+| `DAILY_LLM_LIMIT` | 200 | chamadas ao LLM por dia, somando todos os visitantes |
+
+Perguntas barradas pelo portão de relevância não chamam o LLM e não contam no limite diário.
+
+Publicação no Hugging Face Spaces (gratuito, 16 GB de RAM, comporta o modelo de embeddings):
+
+1. Crie um Space em huggingface.co/new-space com SDK **Docker** (template em branco).
+2. Em *Settings > Variables and secrets*, adicione o secret `ANTHROPIC_API_KEY`.
+3. Gere um token de escrita em huggingface.co/settings/tokens e rode:
+   ```bash
+   HF_TOKEN=<token> bash deploy/push_space.sh <usuario-hf>/<nome-do-space>
+   ```
+
+O build baixa as fontes e gera o índice dentro da imagem; o app sobe pronto. Os logs do Space
+são efêmeros (somem ao reiniciar), o que basta para uma demonstração.
 
 ## Estrutura
 
